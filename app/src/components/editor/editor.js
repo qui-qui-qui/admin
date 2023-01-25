@@ -19,7 +19,7 @@ export default class Editor extends Component {
     }
 
     init(page) {
-        this.iframe = document.querySelector('iframe');
+        this.iframe = document.querySelector("iframe");
         this.open(page);
         this.loadPageList();
     }
@@ -27,7 +27,32 @@ export default class Editor extends Component {
     open(page) {
         this.currentPage = `../${page}`;
         this.iframe.load(this.currentPage, () => {
-            console.log(this.currentPage);
+            const body = this.iframe.contentDocument.body;
+            let textNodes = [];
+
+            function recursion(element) {
+                element.childNodes.forEach((node) => {
+                    if (
+                        node.nodeName === "#text" &&
+                        node.nodeValue.replace(/\s+/g, "").length > 0
+                    ) {
+                        textNodes.push(node);
+                    } else {
+                        recursion(node);
+                    }
+                });
+            }
+
+            recursion(body);
+
+            textNodes.forEach((node) => {
+                const wrapper =
+                    this.iframe.contentDocument.createElement("text-editor");
+
+                node.parentNode.replaceChild(wrapper, node);
+                wrapper.appendChild(node);
+                wrapper.contentEditable = "true";
+            });
         });
     }
 
@@ -61,7 +86,7 @@ export default class Editor extends Component {
         //         </h1>
         //     );
         // });
-        
+
         return (
             <iframe src={this.currentPage} frameBorder="0"></iframe>
             // <>
@@ -74,6 +99,6 @@ export default class Editor extends Component {
             //     <button onClick={this.createNewPage}>Создать страницу</button>
             //     {pages}
             // </>
-        )
+        );
     }
 }
