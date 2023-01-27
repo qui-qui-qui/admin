@@ -1,6 +1,6 @@
 import "../../helpers/iframeLoader.js";
-import axios from "axios";
-import React, { Component } from "react";
+import axios from 'axios';
+import React, {Component} from 'react';
 
 export default class Editor extends Component {
     constructor() {
@@ -8,9 +8,8 @@ export default class Editor extends Component {
         this.currentPage = "index.html";
         this.state = {
             pageList: [],
-            newPageName: "",
-        };
-
+            newPageName: ""
+        }
         this.createNewPage = this.createNewPage.bind(this);
     }
 
@@ -19,86 +18,121 @@ export default class Editor extends Component {
     }
 
     init(page) {
-        this.iframe = document.querySelector("iframe");
+        this.iframe = document.querySelector('iframe');
         this.open(page);
         this.loadPageList();
     }
 
     open(page) {
-        this.currentPage = `../${page}`;
-        this.iframe.load(this.currentPage, () => {
-            const body = this.iframe.contentDocument.body;
-            let textNodes = [];
+        this.currentPage = `../${page}?rnd=${Math.random()}`;
 
-            function recursion(element) {
-                element.childNodes.forEach((node) => {
-                    if (
-                        node.nodeName === "#text" &&
-                        node.nodeValue.replace(/\s+/g, "").length > 0
-                    ) {
-                        textNodes.push(node);
-                    } else {
-                        recursion(node);
-                    }
-                });
-            }
+        axios
+            .get(`../${page}`)
+            .then(res => this.parseStrToDOM(res.data))
+            .then(this.wrapTextNodes)
+            .then(dom => {
+                this.virtualDom = dom;
+                return dom;
+            })
+            .then(this.serializeDOMToString)
+            .then(html => axios.post("./api/saveTempPage.php", {html}))
+            .then(() => this.iframe.load("../temp.html"))
+            .then(() => this.enableEditing())
+    }
 
-            recursion(body);
-
-            textNodes.forEach((node) => {
-                const wrapper =
-                    this.iframe.contentDocument.createElement("text-editor");
-
-                node.parentNode.replaceChild(wrapper, node);
-                wrapper.appendChild(node);
-                wrapper.contentEditable = "true";
-            });
+    enableEditing() {
+        this.iframe.contentDocument.body.querySelectorAll("text-editor").forEach(element => {
+            element.contentEditable = "true";
+            element.addEventListener("input", () => {
+                this.onTextEdit(element);
+            })
         });
     }
 
+    onTextEdit(element) {
+        const id = element.getAttribute("nodeid");
+        this.virtualDom.body.querySelector(`[nodeid="${id}"]`).innerHTML = element.innerHTML;
+        console.log(this.virtualDom);
+    }
+
+    parseStrToDOM(str) {
+        const parser = new DOMParser();
+        return parser.parseFromString(str, "text/html");
+    }
+
+    wrapTextNodes(dom) {
+        const body = dom.body;
+        let textNodes = [];
+
+        function recursy(element) {
+            element.childNodes.forEach(node => {
+                
+                if(node.nodeName === "#text" && node.nodeValue.replace(/\s+/g, "").length > 0) {
+                    textNodes.push(node);
+                } else {
+                    recursy(node);
+                }
+            })
+        };
+
+        recursy(body);
+
+        textNodes.forEach((node, i) => {
+            const wrapper = dom.createElement('text-editor');
+            node.parentNode.replaceChild(wrapper, node);
+            wrapper.appendChild(node);
+            wrapper.setAttribute("nodeid", i);
+        });
+
+        return dom;
+    }
+
+    serializeDOMToString(dom) {
+        const serializer = new XMLSerializer();
+        return serializer.serializeToString(dom);
+    }
+
     loadPageList() {
-        axios.get("./api").then((res) => this.setState({ pageList: res.data }));
+        axios
+            .get("./api")
+            .then(res => this.setState({pageList: res.data}))
     }
 
     createNewPage() {
         axios
-            .post("./api/createNewPage.php", { name: this.state.newPageName })
+            .post("./api/createNewPage.php", {"name": this.state.newPageName})
             .then(this.loadPageList())
-            .catch(() => alert("Страница уже существует"));
+            .catch(() => alert("Страница уже существует!"));
     }
 
     deletePage(page) {
         axios
-            .post("./api/deletePage.php", { name: page })
+            .post("./api/deletePage.php", {"name": page})
             .then(this.loadPageList())
-            .catch(() => alert("Страницы не существует"));
+            .catch(() => alert("Страницы не существует!"));
     }
 
     render() {
-        // const { pageList } = this.state;
+        // const {pageList} = this.state;
         // const pages = pageList.map((page, i) => {
         //     return (
-        //         <h1 key={i}>
-        //             {page}
-        //             <a href="#" onClick={() => this.deletePage(page)}>
-        //                 X
-        //             </a>
+        //         <h1 key={i}>{page}
+        //             <a 
+        //             href="#"
+        //             onClick={() => this.deletePage(page)}>(x)</a>
         //         </h1>
-        //     );
+        //     )
         // });
 
         return (
             <iframe src={this.currentPage} frameBorder="0"></iframe>
             // <>
             //     <input
-            //         type="text"
-            //         onChange={(e) => {
-            //             this.setState({ newPageName: e.target.value });
-            //         }}
-            //     />
+            //         onChange={(e) => {this.setState({newPageName: e.target.value})}} 
+            //         type="text"/>
             //     <button onClick={this.createNewPage}>Создать страницу</button>
             //     {pages}
             // </>
-        );
+        )
     }
 }
